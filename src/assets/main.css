@@ -1,0 +1,23 @@
+.data-row.selected {
+    border: 1px solid red;
+}
+.data-row {
+    margin-top: 10px;
+    box-sizing: border-box;
+    padding-left: 10px;
+    border: 1px solid white;
+    backface-visibility: hidden;
+}
+.preloader {
+    position: fixed;
+    top: 0;
+    left: 0;
+    background-color: black;
+    background-image: url('./loading.gif');
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: 10% auto;
+    opacity: 0.6;
+    width: 100%;
+    height: 100%;
+}
