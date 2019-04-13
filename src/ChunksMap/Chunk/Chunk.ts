@@ -14,21 +14,26 @@
  * load() - возвращает промис который разрешится когда будут загружены строки чанка
  * этот промис создается один раз и если чанк уже загружается/загружен вернется этот же промис
  * 
+ * unload() - очищает чанк, удаляет все строки и ссылки на них, ставит статус "незагружен", 
+ * очищает промис загрузки и ставит высоту равную выбранной относительно браузера высоте emptySpace
+ * 
  * get height - возвращает реальную высоту отображения
- * set height - устанавливает напрямую высоту незагруженным блокам, нужно для подгонки emptySpace
- * после догрузки
+ * set height - устанавливает напрямую высоту незагруженным блокам, нужно установки высоты emptySpace
  * 
  * get position - возвращает положение отображения относительно документа
  * 
  * addRowToView(row: DataRow) - используется в конструкторе новой строки для вставки ее отображения 
  * в отображение чанка
  * 
+ * removeRowFromView(roe: DataRow) - используется для очистки чанка в объекте DataRow для правильного,
+ *  поддерживаемого всеми браузерами удаления блока строки
+ * 
  * getByPosition(position: number) - находит в чанке строку располагающуюся на позиции position
  */
 
 import { getData } from "./DataLoad/DataLoad";
 import { DataRow } from "./DataRow/DataRow";
-import viewPort from '../../ViewPort/ViewPort';
+import { EMPTY_SPACE_HEIGHT } from "../../constants";
 
 export interface IPosition {
     top: number;
@@ -56,13 +61,14 @@ export class Chunk {
             this.loadPromise = new Promise((resolve, reject)=>{
         
                 getData(this.index).then(
-                    (data: string[])=>{
+                    (data: string[]) => {
                         data.forEach(
                             (str: string, idx: number)=>this.rows.push(new DataRow(idx, str, this))
                         );
         
                         this.loaded = true;
                         this.block.style.removeProperty('height');
+                        this.block.style.removeProperty('min-height');
                         resolve(this.loaded);
                     },
                     ()=>reject()
@@ -72,24 +78,39 @@ export class Chunk {
         return this.loadPromise;
     }
 
+    public unload() {
+        this.rows.forEach((row)=>row.remove());
+        this.rows = [];
+        this.loaded = false;
+        this.loadPromise = null;
+        this.height = EMPTY_SPACE_HEIGHT;
+
+    }
+
     get height():number{
-        return this.block.getBoundingClientRect().height;
+        return this.block.offsetHeight;
     }
 
     set height(h: number) {
         this.block.style.height = h + 'px';
+        this.block.style.minHeight = h + 'px';
     }
 
     get position(): IPosition {
-        let rect = this.block.getBoundingClientRect();
+        let oTop = this.block.offsetTop,
+        oHeight = this.block.offsetHeight;
         return {
-            top: rect.top + viewPort.top,
-            bottom: rect.top + viewPort.top + rect.height
+            top: oTop,
+            bottom: oTop + oHeight
         }
     }
 
     public addRowToView(row: HTMLElement) {
         this.block.appendChild(row);
+    }
+
+    public removeRowFromView(row: HTMLElement) {
+        this.block.removeChild(row);
     }
 
     public getByPosition(position: number): DataRow {

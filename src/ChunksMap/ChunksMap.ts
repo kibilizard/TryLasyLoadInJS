@@ -8,7 +8,7 @@
  * init() - инициализация
  *  создает все CHUNKS_COUNT чанков, сначала все пустые
  *  запускает загрузку нулевого чанка, и по его загрузке ставит высоту всех 
- *  остальных (emptySpace) равной нулевому, для имитации реального размера документа
+ *  остальных (emptySpace) равной выбранной в зависимости от браузера высоте EmptySpace
  * 
  * next() - выбрать следующую за выбранной (или первую) строку, при необходимости 
  *  запускает догрузку следующего чанка
@@ -27,19 +27,20 @@
  * 
  * getChunkByPosition - найти чанк располагающийся на определенной высоте относительно документа
  * 
- * resolveUnloadedHeight - пересчитать высоту для emptySpace-чанков как среднее от высот уже загруженных чанков
- *  для наибольшего соответствия положения штатного скроллбара реальным данным
- * 
- * set unloadedHeight - установить высоту всем emptySpace-чанкам
+ * unloadUnvisible - находит и чистит чанки которые оказались дальше чем за 2 страницы от viewPort
  * 
  * select(row:DataRow) - выбрать строку, вызывает сеттер selected у row чтобы прицепить класс, и устанавливает
- *  selected и selectedChunk
+ *  selected и selectedChunk, после выбора и соответственно скроллинга до строки запускает удаление 
+ *  чанков за пределами видимости, если нужно еще раз корректирует позицию
+ * 
+ * cleanSelect - очищаем предыдущую выбранную строк, нужно для ситуации когда очищается чанк в котором 
+ *  была эта строка и ее больше нет в документе
  * 
  */
 
 import { DataRow } from "./Chunk/DataRow/DataRow";
-import { Chunk } from "./Chunk/Chunk";
-import { CHUNKS_COUNT } from "../constants";
+import { Chunk, IPosition } from "./Chunk/Chunk";
+import { CHUNKS_COUNT, EMPTY_SPACE_HEIGHT } from "../constants";
 import viewPort from '../ViewPort/ViewPort';
 
 class ChunksMap {
@@ -50,13 +51,14 @@ class ChunksMap {
     public init(): Promise<boolean> {
         return new Promise((resolve, reject)=>{
 
-            let container = document.getElementById('container');
+            let container = document.body;
             let selectCB = (row: DataRow)=>this.select(row);
             
             for (let i = 0; i < CHUNKS_COUNT; i++) {
                 let chunkBlock = document.createElement('div');
                 container.appendChild(chunkBlock);
                 chunkBlock.setAttribute('chunkId',i.toString());
+                chunkBlock.className = 'data-chunk';
                 
                 let chunk = new Chunk(i,chunkBlock, selectCB);
                 this.chunks.push(chunk);
@@ -64,7 +66,10 @@ class ChunksMap {
 
             this.chunks[0].load().then(
                 () => {
-                    this.unloadedHeight = this.chunks[0].height;
+                    this.chunks
+                    .filter((chunk)=>!chunk.loaded)
+                    .forEach((chunk)=>chunk.height = EMPTY_SPACE_HEIGHT);
+
                     resolve(true);
                 }, reject);
         })
@@ -85,10 +90,7 @@ class ChunksMap {
         let nextChunk = this.chunks[this.selectedChunk.index +1] || null;
 
         if (nextChunk) nextChunk.load().then(
-            ()=>{
-                this.resolveUnloadedHeight();
-                this.select(nextChunk.rows[0]);
-            });
+            ()=>this.select(nextChunk.rows[0]));
     }
 
     public prev(){
@@ -99,31 +101,18 @@ class ChunksMap {
         else if (this.selectedChunk.index > 0) {
             let prevChunk = this.chunks[this.selectedChunk.index - 1];
             prevChunk.load().then(
-                ()=>{
-                    this.resolveUnloadedHeight();
-                    this.select(prevChunk.rows[prevChunk.rows.length - 1]);
-                }
+                ()=>this.select(prevChunk.rows[prevChunk.rows.length - 1])
             );
         }
     }
 
     public last(){
         let lastChunk = this.chunks[this.chunks.length - 1];
-        lastChunk.load().then(
-            ()=>{
-                this.resolveUnloadedHeight();
-                this.select(lastChunk.rows[lastChunk.rows.length - 1]);
-            }
-        );
+        lastChunk.load().then( () => this.select(lastChunk.rows[lastChunk.rows.length - 1]) );
     }
 
     public first(){
-        this.chunks[0].load().then(
-            ()=>{
-                this.resolveUnloadedHeight();
-                this.select(this.chunks[0].rows[0]);
-            }
-        );
+        this.chunks[0].load().then( () => this.select(this.chunks[0].rows[0]) );
     }
 
     public nextPage(){
@@ -137,24 +126,40 @@ class ChunksMap {
         let top = viewPort.prevPagePosition + 1;
         
         let chunk = this.getChunkByPosition(top);
-        this.tryGetRowInChunk(top,chunk);
+        this.tryGetRowInChunk(top, chunk, true);
     }
 
-    private tryGetRowInChunk(position: number, chunk: Chunk) {
-        let chunkOldTop = chunk.position.top;
+    private tryGetRowInChunk(position: number, chunk: Chunk, toPrev: boolean = false) {
+        let chunkOldTop  = chunk.position.top;
+        let chunkOldHeight = chunk.height;
+
         chunk.load().then(()=>{
-            this.resolveUnloadedHeight();
-            position += chunk.position.top - chunkOldTop;
+            let {top, bottom} = chunk.position;
+            position += top - chunkOldTop;
+
+            /**
+             * в IE/Edge может получиться так, что после загрузки чанка, 
+             * искомая строка будет ниже viewPort - корректируем
+             *  */ 
+            if (toPrev) { 
+                let offset = chunk.height - chunkOldHeight;
+                if (bottom >= viewPort.top) viewPort.scrollBy(offset);
+                position += offset;
+            }
+
             let row = chunk.getByPosition(position);
             if (!row) {
                 if (chunk.position.bottom < position ) 
-                    this.tryGetRowInChunk(position,this.chunks[chunk.index + 1]);
+                    this.tryGetRowInChunk(position,this.chunks[chunk.index + 1], toPrev);
                 else if (chunk.position.bottom > position) 
-                    this.tryGetRowInChunk(position, this.chunks[chunk.index -1]);
+                    this.tryGetRowInChunk(position, this.chunks[chunk.index -1], toPrev);
                 else 
                     console.error('row not founded but chunk in right position');
             }
-            else this.select(row);
+            else {
+                this.select(row);
+                this.unloadUnvisible();
+            }
         })
     }
 
@@ -167,24 +172,47 @@ class ChunksMap {
         return null;
     }
 
-    public resolveUnloadedHeight() {
-        let loaded = this.chunks.filter((chunk)=>chunk.loaded);
-        let newH = loaded.reduce((sum, curent) => sum + curent.height,0) / loaded.length;
-        this.unloadedHeight = newH;
-    }
-
-    set unloadedHeight(height: number) {
+    public unloadUnvisible(): boolean {
+        let removePosition = viewPort.toUnloadPositions;
+        let toRemove: Chunk[] = [];
         this.chunks
-            .filter((chunk)=>!chunk.loaded)
-            .forEach((chunk)=>chunk.height = height);
+            .filter((chunk) => chunk.loaded)
+            .forEach((chunk) => {
+                let position = chunk.position;
+                if (
+                    (!!removePosition.top && (position.bottom <= removePosition.top)) || 
+                    (!!removePosition.bottom && (position.top >= removePosition.bottom))
+                    ) {
+                    toRemove.push(chunk);;
+                    if (this.selectedChunk === chunk) this.cleanSelect();
+                }
+            })
+
+        toRemove.forEach((chunk) => chunk.unload());
+
+        return toRemove.length > 0;
     }
 
     public select(row: DataRow) {
         if (this.selected) this.selected.selected = false;
-        row.selected = true;
 
         this.selectedChunk = row.chunk;
         this.selected = row;
+
+        row.selected = true;
+
+        let rowOffset = row.position.top - viewPort.top;
+        
+        if (this.unloadUnvisible()) {
+            let newPosition = row.position.top - rowOffset;
+            if (viewPort.top !== newPosition) viewPort.scrollTo(newPosition);
+        }
+
+    }
+
+    private cleanSelect() {
+        this.selectedChunk = null;
+        this.selected = null;
     }
 }
 

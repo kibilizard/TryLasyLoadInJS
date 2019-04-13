@@ -8,7 +8,7 @@ module.exports = {
     },
     output: {
         path: path.resolve(__dirname, './distrib'),
-        publicPath: '/distrib',
+        publicPath: '/lljstest/distrib',
         filename: "[name].js"
     },
     devServer: {
@@ -67,7 +67,7 @@ module.exports = {
             },
             {
                 test: /\.(png|jpe?g|gif|svg|woff|woff2|ttf|eot|ico)$/,
-                loader: 'file-loader?name=assets/[path][name].[hash].[ext]'
+                loader: 'file-loader?name=/[path][name].[hash].[ext]'
             }
         ]
     },

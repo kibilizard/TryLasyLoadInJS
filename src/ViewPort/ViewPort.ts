@@ -1,3 +1,6 @@
+import { IPosition } from "../ChunksMap/Chunk/Chunk";
+import { Z_BLOCK } from "zlib";
+
  /**
   * Класс ViewPort - отображение текущего положения экрана
   * top - положение верхней границы экрана относительно документа
@@ -17,42 +20,63 @@
  class ViewPort {
     get top():number { return pageYOffset; }
 
-    get height():number { return document.documentElement.clientHeight;}
+    get height():number { 
+        let height = document.documentElement.clientHeight || document.body.clientHeight;
+        return height;
+    }
 
     get bottom():number { return this.top + this.height;}
 
     get nextPagePosition():number {
         let position = this.bottom + this.height;
-        return position <= document.body.scrollHeight ? position : document.body.scrollHeight;
+        let scrollH = document.documentElement.scrollHeight || document.body.scrollHeight;
+        return position <= scrollH ? position : scrollH;
     }
 
     get prevPagePosition():number {
         let position = this.top - this.height;
-        return position >=0 ? position : 0;
+        return position >=0 ? position : null;
     }
 
-    private scrollTO: number = null;
+    get toUnloadPositions():IPosition {
+        let top = this.prevPagePosition - this.height;
+        let bottom = this.nextPagePosition + this.height;
+        let scrollH = document.documentElement.scrollHeight || document.body.scrollHeight;
+
+        top = top > 0 ? top : null;
+        bottom = bottom < scrollH ? bottom : null;
+        return {top, bottom};
+    }
+
+    private timeOut: number = null;
+    private blocked: boolean = false;
 
     public scrollCB(){console.log('inner scroll cb')};
 
     constructor(){
         
         onscroll = (e)=>{
-            this.scrollTO && clearTimeout(this.scrollTO);
+            if (this.blocked) {
+                this.blocked = false;
+                return;
+            }
+            this.timeOut && clearTimeout(this.timeOut);
             
-            this.scrollTO = setTimeout(()=>{
-                this.scrollTO = null;
+            this.timeOut = setTimeout(()=>{
+                this.timeOut = null;
                 this.scrollCB();
-            },20);
+            },200);
         };
     }
 
     public scrollBy(offset: number) {
         scrollBy(0,offset);
+        this.blocked = true;
     }
 
     public scrollTo(position: number) {
         scrollTo(0,position);
+        this.blocked = true;
     }
 }
 

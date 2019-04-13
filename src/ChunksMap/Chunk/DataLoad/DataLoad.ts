@@ -11,6 +11,7 @@ export const getData = (idx: number) => new Promise((resolve, reject)=>{
     let req = new XMLHttpRequest();
 
     req.open('GET',url, true);
+    req.overrideMimeType('text/plain; charset=windows-1251'); //подмена кодировки для ie
     req.onload = function() {
         if (this.status === 200) {
             let rowsSplit = this.response.split(/\r?\n+/);
