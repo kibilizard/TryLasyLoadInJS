@@ -100,8 +100,17 @@ class ChunksMap {
 
         else if (this.selectedChunk.index > 0) {
             let prevChunk = this.chunks[this.selectedChunk.index - 1];
+            let chunkOldHeight = prevChunk.height;
             prevChunk.load().then(
-                ()=>this.select(prevChunk.rows[prevChunk.rows.length - 1])
+                () => {
+                    /**
+                    * в IE/Edge может получиться так, что после загрузки чанка, 
+                    * искомая строка будет ниже viewPort - корректируем
+                    *  */ 
+                    if (prevChunk.position.bottom > viewPort.top) 
+                        viewPort.scrollBy(prevChunk.height - chunkOldHeight);
+                    this.select(prevChunk.rows[prevChunk.rows.length - 1]);
+                }
             );
         }
     }

@@ -8,7 +8,7 @@ module.exports = {
     },
     output: {
         path: path.resolve(__dirname, './distrib'),
-        publicPath: '/lljstest/distrib',
+        publicPath: '/distrib',
         filename: "[name].js"
     },
     devServer: {

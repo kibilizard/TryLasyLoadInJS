@@ -77,7 +77,6 @@ let onScrollUpload = () =>  {
  */
 chunksMap.init().then(
     ()=>{
-        console.log('chunks map initialized', chunksMap);
         viewPort.scrollCB = onScrollUpload;
         KeyController.keyMap
             .set('ArrowUp', ()=>chunksMap.prev())
